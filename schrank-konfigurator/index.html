@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schrank-Konfigurator</title>
+<style>
+  :root {
+    --bg: #f6f1ea;
+    --panel: #ffffff;
+    --fg: #2b2118;
+    --muted: #7a6a5a;
+    --line: #e2d6c6;
+    --accent: #b5652a;
+    --accent-soft: #f3e2d3;
+    --wood: #e8c9a0;
+    --wood-dark: #a0703f;
+    --warn-bg: #fff4d6;
+    --warn-fg: #7a5600;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1713; --panel: #26201a; --fg: #f1e8dd; --muted: #b3a492; --line: #3d342a;
+      --accent: #e08a47; --accent-soft: #3a2a1d; --wood: #6b4d30; --wood-dark: #d8a46b;
+      --warn-bg: #3a3014; --warn-fg: #f3d27a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, "Segoe UI", sans-serif; font-size: 14px; }
+  header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; }
+  header .spacer { flex: 1; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  details:last-child { border-bottom: 0; }
+  summary { font-weight: 700; cursor: pointer; padding: 6px 0; }
+  .row { display: grid; grid-template-columns: 1fr 96px 44px; gap: 6px; align-items: center; margin: 5px 0; }
+  .row label { color: var(--fg); }
+  .row .unit { color: var(--muted); font-size: 12px; }
+  .row.wide { grid-template-columns: 1fr 1fr; }
+  input, select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 14px; text-align: right; }
+  input[type=text], select { text-align: left; }
+  .results { display: flex; flex-direction: column; gap: 16px; }
+  .top { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; gap: 16px; }
+  @media (max-width: 700px) { .top { grid-template-columns: 1fr; } }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-content: start; }
+  .tile { background: var(--accent-soft); border-radius: 10px; padding: 12px; }
+  .tile .k { color: var(--muted); font-size: 12px; }
+  .tile .v { font-size: 22px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile.total { grid-column: span 2; background: var(--accent); color: #fff; }
+  .tile.total .k { color: rgba(255,255,255,0.85); }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  th:nth-child(2), td:nth-child(2), th:nth-child(7), td:nth-child(7) { text-align: left; }
+  tfoot td { font-weight: 700; border-bottom: 0; }
+  .tablewrap { overflow-x: auto; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  svg text { fill: var(--muted); font-size: 11px; }
+  .toggle { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .toggle input { width: auto; }
+  .printonly { display: none; }
+  @media print {
+    body { background: #fff; color: #000; }
+    header button, .inputs, .toggle { display: none !important; }
+    main { grid-template-columns: 1fr; padding: 0; }
+    .panel { border: 0; padding: 6px 0; }
+    .printonly { display: block; }
+    .tile { border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🪚 Schrank-Konfigurator</h1>
+  <span class="spacer"></span>
+  <button class="ghost" id="resetBtn" title="Alle Werte auf Beispielwerte zurücksetzen">Zurücksetzen</button>
+  <button class="ghost" id="csvBtn" title="Zuschnittliste als CSV für Excel">Zuschnitt → Excel</button>
+  <button id="printBtn">Drucken / PDF</button>
+</header>
+
+<main>
+  <section class="panel inputs" id="inputs"></section>
+
+  <section class="results">
+    <div class="panel">
+      <div class="printonly"><h2 id="printTitle"></h2></div>
+      <div class="top">
+        <div>
+          <svg id="drawing" viewBox="0 0 300 400" width="100%"></svg>
+          <label class="toggle"><input type="checkbox" id="showDoors" checked> Türen anzeigen</label>
+        </div>
+        <div>
+          <div class="tiles" id="tiles"></div>
+          <div id="warnings"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Zuschnittliste</h2>
+      <div class="tablewrap"><table id="cutTable"></table></div>
+      <p class="note">Kante L / B = Anzahl bekanteter Längs- bzw. Breitseiten. Maße sind Fertigmaße in mm.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Material &amp; Beschläge</h2>
+      <div class="tablewrap"><table id="matTable"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>Zeitermittlung</h2>
+      <div class="tablewrap"><table id="timeTable"></table></div>
+      <p class="note">Fertigung in der Werkstatt, ohne Montage beim Kunden. Lohnkosten = Zeit × Stundensatz, ohne Zuschläge.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  // ---------- Eingabefelder (alle Werte anpassbar) ----------
+  const GROUPS = [
+    { title: 'Projekt', open: true, fields: [
+      { id: 'projekt', label: 'Kunde / Projekt', type: 'text', def: 'Kleiderschrank Muster' },
+    ]},
+    { title: 'Außenmaße', open: true, fields: [
+      { id: 'B', label: 'Breite', def: 800, unit: 'mm' },
+      { id: 'H', label: 'Höhe', def: 2000, unit: 'mm' },
+      { id: 'T', label: 'Korpustiefe', def: 560, unit: 'mm' },
+      { id: 't', label: 'Plattenstärke', def: 19, unit: 'mm' },
+      { id: 'sockel', label: 'Sockelhöhe (0 = ohne)', def: 100, unit: 'mm' },
+    ]},
+    { title: 'Aufteilung', open: true, fields: [
+      { id: 'mittel', label: 'Mittelseiten', def: 0, unit: 'Stk' },
+      { id: 'boeden', label: 'Einlegeböden pro Feld', def: 4, unit: 'Stk' },
+      { id: 'bodenRueck', label: 'Einlegeboden zurückgesetzt', def: 20, unit: 'mm' },
+      { id: 'tueren', label: 'Türen (aufliegend)', def: 2, unit: 'Stk' },
+      { id: 'fuge', label: 'Türfuge', def: 3, unit: 'mm' },
+    ]},
+    { title: 'Rückwand', open: false, fields: [
+      { id: 'rwMode', label: 'Befestigung', type: 'select', def: 'nut', options: [['nut', 'eingenutet'], ['auf', 'aufgesetzt']] },
+      { id: 'rwDicke', label: 'Rückwand-Dicke', def: 4, unit: 'mm' },
+      { id: 'nut', label: 'Nuttiefe', def: 8, unit: 'mm' },
+    ]},
+    { title: 'Preise', open: false, fields: [
+      { id: 'pKorpus', label: 'Korpusplatte', def: 15, unit: '€/m²', step: 0.5 },
+      { id: 'pFront', label: 'Frontplatte (Türen)', def: 25, unit: '€/m²', step: 0.5 },
+      { id: 'pRw', label: 'Rückwand', def: 4, unit: '€/m²', step: 0.5 },
+      { id: 'verschnitt', label: 'Verschnitt Platten', def: 15, unit: '%' },
+      { id: 'pKante', label: 'Kante', def: 0.6, unit: '€/lfm', step: 0.05 },
+      { id: 'kantenZugabe', label: 'Kanten-Zugabe', def: 10, unit: '%' },
+      { id: 'pTopf', label: 'Topfband', def: 3.5, unit: '€/Stk', step: 0.1 },
+      { id: 'pTraeger', label: 'Bodenträger', def: 0.15, unit: '€/Stk', step: 0.05 },
+      { id: 'pGriff', label: 'Griff', def: 5, unit: '€/Stk', step: 0.5 },
+      { id: 'pKlein', label: 'Kleinmaterial pauschal', def: 8, unit: '€' },
+    ]},
+    { title: 'Zeitwerte', open: false, fields: [
+      { id: 'zRuest', label: 'Rüsten pauschal', def: 30, unit: 'min' },
+      { id: 'zZuschnitt', label: 'Zuschnitt je Teil', def: 3, unit: 'min' },
+      { id: 'zKante', label: 'Bekanten je lfm', def: 3, unit: 'min' },
+      { id: 'zTopf', label: 'Topfband bohren + setzen', def: 4, unit: 'min' },
+      { id: 'zLoch', label: 'Lochreihe/Träger je Boden', def: 5, unit: 'min' },
+      { id: 'zKorpus', label: 'Korpusmontage pauschal', def: 30, unit: 'min' },
+      { id: 'zTeil', label: 'Montage je Korpusteil', def: 5, unit: 'min' },
+      { id: 'zTuer', label: 'Tür einhängen + einstellen', def: 10, unit: 'min' },
+      { id: 'zGriff', label: 'Griff montieren', def: 3, unit: 'min' },
+      { id: 'satz', label: 'Stundensatz', def: 55, unit: '€/h' },
+    ]},
+  ];
+  const FIELDS = GROUPS.flatMap(g => g.fields);
+  const KEY = 'schrank.v1';
+  const $ = id => document.getElementById(id);
+
+  function loadValues() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
+    const v = {};
+    for (const f of FIELDS) v[f.id] = saved[f.id] ?? f.def;
+    return v;
+  }
+  let V = loadValues();
+
+  function renderInputs() {
+    const root = $('inputs');
+    root.innerHTML = '';
+    for (const g of GROUPS) {
+      const d = document.createElement('details');
+      d.open = g.open;
+      d.innerHTML = `<summary>${g.title}</summary>`;
+      for (const f of g.fields) {
+        const row = document.createElement('div');
+        row.className = 'row' + (f.type ? ' wide' : '');
+        let input;
+        if (f.type === 'select') {
+          input = `<select id="f_${f.id}">${f.options.map(([val, txt]) => `<option value="${val}" ${V[f.id] === val ? 'selected' : ''}>${txt}</option>`).join('')}</select>`;
+        } else if (f.type === 'text') {
+          input = `<input type="text" id="f_${f.id}" value="${String(V[f.id]).replace(/"/g, '&quot;')}">`;
+        } else {
+          input = `<input type="number" id="f_${f.id}" value="${V[f.id]}" step="${f.step || 1}" min="0">`;
+        }
+        row.innerHTML = `<label for="f_${f.id}">${f.label}</label>${input}${f.type ? '' : `<span class="unit">${f.unit}</span>`}`;
+        d.appendChild(row);
+      }
+      root.appendChild(d);
+    }
+  }
+  $('inputs').addEventListener('input', onInput);
+  $('inputs').addEventListener('change', onInput);
+
+  function onInput(e) {
+    const id = e.target.id?.replace('f_', '');
+    const f = FIELDS.find(x => x.id === id);
+    if (!f) return;
+    V[id] = f.type ? e.target.value : (parseFloat(e.target.value) || 0);
+    try { localStorage.setItem(KEY, JSON.stringify(V)); } catch {}
+    update();
+  }
+
+  // ---------- Berechnung ----------
+  function topfbaender(h) { return h <= 900 ? 2 : h <= 1500 ? 3 : h <= 2000 ? 4 : 5; }
+
+  function compute(v) {
+    const t = v.t, B = v.B, H = v.H, sock = v.sockel;
+    const nm = Math.max(0, Math.round(v.mittel));
+    const k = Math.max(0, Math.round(v.boeden));
+    const n = Math.max(0, Math.round(v.tueren));
+    const Tp = v.rwMode === 'auf' ? v.T - v.rwDicke : v.T; // Tiefe der Korpusteile
+    const innenB = B - 2 * t;
+    const innenH = H - sock - 2 * t;
+    const felder = nm + 1;
+    const feldB = (innenB - nm * t) / felder;
+
+    const parts = [];
+    const add = (name, anz, L, Br, d, mat, kL, kB) => { if (anz > 0) parts.push({ name, anz, L, Br, d, mat, kL, kB }); };
+    add('Seite', 2, H, Tp, t, 'Korpus', 1, 0);
+    add('Boden / Deckel', 2, innenB, Tp, t, 'Korpus', 1, 0);
+    add('Mittelseite', nm, innenH, Tp, t, 'Korpus', 1, 0);
+    add('Einlegeboden', felder * k, feldB - 2, Tp - v.bodenRueck, t, 'Korpus', 1, 0);
+    if (sock > 0) add('Sockelblende', 1, innenB, sock, t, 'Korpus', 1, 0);
+    if (v.rwMode === 'nut') add('Rückwand', 1, innenH + 2 * (v.nut - 1), innenB + 2 * (v.nut - 1), v.rwDicke, 'Rückwand', 0, 0);
+    else add('Rückwand', 1, H - sock, B, v.rwDicke, 'Rückwand', 0, 0);
+    const tH = H - sock - v.fuge;
+    const tB = n > 0 ? (B - n * v.fuge) / n : 0;
+    add('Tür', n, tH, tB, t, 'Front', 2, 2);
+
+    // Flächen & Kanten
+    const area = { Korpus: 0, Front: 0, 'Rückwand': 0 };
+    let kantenM = 0, teile = 0, korpusTeile = 0;
+    for (const p of parts) {
+      p.area = p.anz * p.L * p.Br / 1e6;
+      p.kante = p.anz * (p.kL * p.L + p.kB * p.Br) / 1000;
+      area[p.mat] += p.area;
+      kantenM += p.kante;
+      teile += p.anz;
+      if (p.mat === 'Korpus' && p.name !== 'Einlegeboden') korpusTeile += p.anz;
+    }
+    const kantenKauf = kantenM * (1 + v.kantenZugabe / 100);
+    const vs = 1 + v.verschnitt / 100;
+    const nBoeden = felder * k;
+    const nTopf = n * topfbaender(tH);
+
+    const mat = [
+      ['Korpusplatte', `${fmt(area.Korpus * vs, 2)} m²`, area.Korpus * vs * v.pKorpus],
+      ['Frontplatte', `${fmt(area.Front * vs, 2)} m²`, area.Front * vs * v.pFront],
+      ['Rückwand', `${fmt(area['Rückwand'] * vs, 2)} m²`, area['Rückwand'] * vs * v.pRw],
+      ['Kante', `${fmt(kantenKauf, 1)} lfm`, kantenKauf * v.pKante],
+      ['Topfbänder', `${nTopf} Stk`, nTopf * v.pTopf],
+      ['Bodenträger', `${nBoeden * 4} Stk`, nBoeden * 4 * v.pTraeger],
+      ['Griffe', `${n} Stk`, n * v.pGriff],
+      ['Kleinmaterial', 'pauschal', v.pKlein],
+    ].filter(r => r[2] > 0);
+    const matSum = mat.reduce((s, r) => s + r[2], 0);
+
+    const time = [
+      ['Rüsten', 'pauschal', v.zRuest],
+      ['Zuschnitt', `${teile} Teile`, teile * v.zZuschnitt],
+      ['Bekanten', `${fmt(kantenM, 1)} lfm`, kantenM * v.zKante],
+      ['Topfbänder', `${nTopf} Stk`, nTopf * v.zTopf],
+      ['Lochreihen / Bodenträger', `${nBoeden} Böden`, nBoeden * v.zLoch],
+      ['Korpusmontage', `${korpusTeile} Teile`, v.zKorpus + korpusTeile * v.zTeil],
+      ['Türen einhängen', `${n} Stk`, n * v.zTuer],
+      ['Griffe', `${n} Stk`, n * v.zGriff],
+    ].filter(r => r[2] > 0);
+    const minSum = time.reduce((s, r) => s + r[2], 0);
+    const lohn = minSum / 60 * v.satz;
+
+    const warnings = [];
+    if (innenH <= 0 || innenB <= 0 || feldB <= 2) warnings.push('⛔ Maße passen nicht: Innenraum ist zu klein für Plattenstärke / Mittelseiten.');
+    if (feldB - 2 > 800 && k > 0 && t <= 19) warnings.push(`Einlegeböden sind ${fmt(feldB - 2, 0)} mm lang – ab ca. 800 mm biegen sie sich durch. Mittelseite einplanen?`);
+    if (tB > 600) warnings.push(`Türbreite ${fmt(tB, 0)} mm – über 600 mm wird die Tür schwer und hängt leicht. Mehr Türen?`);
+    if (n > 0 && nm > 0 && n % felder !== 0) warnings.push('Türanzahl passt nicht zu den Feldern – eine Tür würde vor einer Mittelseite aufgehen.');
+    if (Tp < 300) warnings.push('Korpustiefe unter 300 mm – für Kleiderstangen sind ca. 560–600 mm üblich.');
+
+    return { parts, mat, matSum, time, minSum, lohn, warnings, felder, feldB, innenB, innenH, tB, tH, n, k, nm };
+  }
+
+  // ---------- Ausgabe ----------
+  const fmt = (x, d = 0) => (isFinite(x) ? x : 0).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const eur = x => fmt(x, 2) + ' €';
+
+  function update() {
+    const r = compute(V);
+    $('printTitle').textContent = `${V.projekt} – ${fmt(V.B)} × ${fmt(V.H)} × ${fmt(V.T)} mm`;
+
+    $('tiles').innerHTML = `
+      <div class="tile"><div class="k">Material</div><div class="v">${eur(r.matSum)}</div></div>
+      <div class="tile"><div class="k">Fertigungszeit</div><div class="v">${fmt(r.minSum / 60, 1)} h</div></div>
+      <div class="tile"><div class="k">Lohn (${fmt(V.satz)} €/h)</div><div class="v">${eur(r.lohn)}</div></div>
+      <div class="tile"><div class="k">Teile</div><div class="v">${r.parts.reduce((s, p) => s + p.anz, 0)}</div></div>
+      <div class="tile total"><div class="k">Material + Lohn (ohne Zuschläge)</div><div class="v">${eur(r.matSum + r.lohn)}</div></div>`;
+    $('warnings').innerHTML = r.warnings.map(w => `<div class="warn">${w}</div>`).join('');
+
+    let pos = 0;
+    $('cutTable').innerHTML = `
+      <thead><tr><th>Pos</th><th>Bezeichnung</th><th>Anz</th><th>Länge</th><th>Breite</th><th>Dicke</th><th>Material</th><th>Kante L</th><th>Kante B</th></tr></thead>
+      <tbody>${r.parts.map(p => `<tr><td>${++pos}</td><td>${p.name}</td><td>${p.anz}</td><td>${fmt(p.L, 1)}</td><td>${fmt(p.Br, 1)}</td><td>${fmt(p.d)}</td><td>${p.mat}</td><td>${p.kL}</td><td>${p.kB}</td></tr>`).join('')}</tbody>`;
+
+    $('matTable').innerHTML = `
+      <thead><tr><th></th><th>Position</th><th>Menge</th><th>Kosten</th></tr></thead>
+      <tbody>${r.mat.map(m => `<tr><td></td><td>${m[0]}</td><td>${m[1]}</td><td>${eur(m[2])}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td></td><td>Summe</td><td></td><td>${eur(r.matSum)}</td></tr></tfoot>`;
+
+    $('timeTable').innerHTML = `
+      <thead><tr><th></th><th>Arbeitsgang</th><th>Menge</th><th>Minuten</th></tr></thead>
+      <tbody>${r.time.map(z => `<tr><td></td><td>${z[0]}</td><td>${z[1]}</td><td>${fmt(z[2], 0)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td></td><td>Summe</td><td>${fmt(r.minSum / 60, 2)} h</td><td>${fmt(r.minSum, 0)}</td></tr></tfoot>`;
+
+    draw(r);
+    window._last = r;
+  }
+
+  // ---------- Zeichnung (Vorderansicht) ----------
+  function draw(r) {
+    const svg = $('drawing');
+    const B = V.B, H = V.H, t = V.t, sock = V.sockel;
+    if (B <= 0 || H <= 0) { svg.innerHTML = ''; return; }
+    const pad = 34, maxW = 300 - 2 * pad, maxH = 400 - 2 * pad;
+    const s = Math.min(maxW / B, maxH / H);
+    const w = B * s, h = H * s, x0 = (300 - w) / 2, y0 = pad;
+    const X = mm => x0 + mm * s, Y = mm => y0 + mm * s;
+    const showDoors = $('showDoors').checked && r.n > 0;
+    let g = '';
+    const rect = (x, y, ww, hh, fill, stroke, extra = '') =>
+      `<rect x="${X(x)}" y="${Y(y)}" width="${Math.max(0, ww * s)}" height="${Math.max(0, hh * s)}" fill="${fill}" stroke="${stroke}" stroke-width="1" ${extra}/>`;
+
+    // Korpus
+    g += rect(0, 0, B, H, 'var(--wood)', 'var(--wood-dark)');
+    if (sock > 0) g += rect(t, H - sock, B - 2 * t, sock, 'var(--wood-dark)', 'var(--wood-dark)', 'opacity="0.5"');
+    g += rect(t, t, r.innenB, r.innenH, 'var(--panel)', 'var(--wood-dark)');
+    // Mittelseiten + Böden
+    for (let i = 0; i < r.felder; i++) {
+      const fx = t + i * (r.feldB + t);
+      if (i > 0) g += rect(fx - t, t, t, r.innenH, 'var(--wood)', 'var(--wood-dark)');
+      for (let j = 1; j <= r.k; j++) {
+        const by = t + j * r.innenH / (r.k + 1) - t / 2;
+        g += rect(fx + 1, by, r.feldB - 2, t, 'var(--wood)', 'var(--wood-dark)');
+      }
+    }
+    // Türen
+    if (showDoors) {
+      for (let i = 0; i < r.n; i++) {
+        const dx = V.fuge / 2 + i * (r.tB + V.fuge);
+        g += rect(dx, V.fuge / 2, r.tB, r.tH, 'var(--accent)', 'var(--wood-dark)', 'opacity="0.55"');
+        const left = i % 2 === 0;
+        const gx = left ? dx + r.tB - 40 : dx + 30;
+        g += `<rect x="${X(gx)}" y="${Y(r.tH / 2 - 80)}" width="${Math.max(2, 10 * s)}" height="${160 * s}" rx="2" fill="var(--fg)" opacity="0.7"/>`;
+      }
+    }
+    // Bemaßung
+    g += `<line x1="${X(0)}" y1="${y0 + h + 14}" x2="${X(B)}" y2="${y0 + h + 14}" stroke="var(--muted)"/>`;
+    g += `<text x="${x0 + w / 2}" y="${y0 + h + 28}" text-anchor="middle">${fmt(B)} mm</text>`;
+    g += `<line x1="${x0 - 14}" y1="${Y(0)}" x2="${x0 - 14}" y2="${Y(H)}" stroke="var(--muted)"/>`;
+    g += `<text x="${x0 - 20}" y="${y0 + h / 2}" text-anchor="middle" transform="rotate(-90 ${x0 - 20} ${y0 + h / 2})">${fmt(H)} mm</text>`;
+    svg.innerHTML = g;
+  }
+
+  // ---------- Export ----------
+  function exportCsv() {
+    const r = compute(V);
+    const rows = [['Pos', 'Bezeichnung', 'Anzahl', 'Länge', 'Breite', 'Dicke', 'Material', 'Kante L', 'Kante B']];
+    r.parts.forEach((p, i) => rows.push([i + 1, p.name, p.anz, fmt(p.L, 1), fmt(p.Br, 1), p.d, p.mat, p.kL, p.kB]));
+    const csv = '﻿' + rows.map(r => r.join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `Zuschnitt_${String(V.projekt).replace(/[^\wäöüÄÖÜß-]+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  $('csvBtn').onclick = exportCsv;
+  $('printBtn').onclick = () => window.print();
+  $('showDoors').onchange = update;
+  $('resetBtn').onclick = () => {
+    if (!confirm('Alle Werte auf die Beispielwerte zurücksetzen?')) return;
+    try { localStorage.removeItem(KEY); } catch {}
+    V = loadValues();
+    renderInputs();
+    update();
+  };
+
+  renderInputs();
+  update();
+})();
+</script>
+</body>
+</html>
